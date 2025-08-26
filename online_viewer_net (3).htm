@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Digital Twin 3D Neon Dashboard – Multi-Floor Checkboxes</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+  body { margin:0; background:#000; font-family:'Orbitron', sans-serif; color:#0ff; }
+  .controls { display:flex; gap:14px; padding:12px; flex-wrap:wrap; background:#111a; border-radius:10px; margin:10px; align-items:center; }
+  select, button { background:#000; color:#0ff; border:1px solid #0ff; padding:6px 12px; border-radius:8px; cursor:pointer; }
+  select option { background:#000; color:#0ff; }
+  #dashboard3D { width:100%; height:95vh; }
+  #legendToggle { margin-left:auto; }
+  /* Neon checkbox group */
+  .floor-group { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:6px 8px; border:1px dashed #00ffff66; border-radius:10px; background:rgba(0,0,0,0.35); }
+  .floor-chip { display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #0ff6; background:rgba(0,255,255,0.08); box-shadow:0 0 10px #00ffff22 inset; }
+  .floor-chip input { accent-color:#00ffff; transform:scale(1.1); cursor:pointer; }
+  .label-title { font-weight:700; margin-right:6px; opacity:.9; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <!-- ✅ แทนที่ Floor <select> ด้วย checkbox กลุ่ม -->
+  <div class="floor-group" id="floorChecks">
+    <span class="label-title">Floors:</span>
+    <label class="floor-chip"><input type="checkbox" id="floor_all" checked> All Floors</label>
+    <label class="floor-chip"><input type="checkbox" class="floor-item" value="1st_Floor" checked> 1st</label>
+    <label class="floor-chip"><input type="checkbox" class="floor-item" value="M_Floor"   checked> M</label>
+    <label class="floor-chip"><input type="checkbox" class="floor-item" value="2nd_Floor" checked> 2nd</label>
+    <label class="floor-chip"><input type="checkbox" class="floor-item" value="3rd_Floor" checked> 3rd</label>
+    <label class="floor-chip"><input type="checkbox" class="floor-item" value="4th_Floor" checked> 4th</label>
+    <label class="floor-chip"><input type="checkbox" class="floor-item" value="5th_Floor" checked> 5th</label>
+  </div>
+
+  <select id="systemSelect">
+    <option value="ALL">All Systems</option>
+    <option value="CCTV">CCTV</option>
+    <option value="Electrical">Electrical</option>
+    <option value="Water">Water</option>
+    <option value="Air">Air</option>
+  </select>
+
+  <select id="paramSelect">
+    <option value="ALL">All Parameters</option>
+  </select>
+
+  <button id="legendToggle">Show Legend</button>
+</div>
+
+<div id="dashboard3D"></div>
+
+<script>
+/* ====== Config ====== */
+const parameters = {
+  CCTV: ["Offline","Online","Intruder","Total"],
+  Electrical: ["Voltage","Current","Power","Frequency"],
+  Water: ["Flow Rate","Water Usage","Duration (Months)","Duration (Days)"],
+  Air: ["Temperature","Humidity","PM2.5","PM10","CO2","TVOC","CH2O"]
+};
+
+const floors = ["1st_Floor","M_Floor","2nd_Floor","3rd_Floor","4th_Floor","5th_Floor"];
+const neonPalette = ["#00FFFF", "#7DF9FF", "#8A2BE2", "#FF00FF", "#00FF7F", "#FF1493", "#1E90FF", "#00CED1"];
+
+const pointsPerTrace = 24*3; // x-axis ยืด 3 เท่า
+const xAxisValues = [...Array(pointsPerTrace).keys()];
+
+/* ====== Data generator ====== */
+function generateData(param) {
+  const base = {
+    "Offline":[0,5], "Online":[5,20], "Intruder":[0,2], "Total":[5,20],
+    "Voltage":[210,230], "Current":[1,30], "Power":[0.5,10], "Frequency":[49,51],
+    "Flow Rate":[0,1], "Water Usage":[10,100], "Duration (Months)":[1,12], "Duration (Days)":[1,30],
+    "Temperature":[22,28], "Humidity":[40,60], "PM2.5":[5,25], "PM10":[10,50],
+    "CO2":[400,800], "TVOC":[0,1], "CH2O":[0,0.1]
+  };
+  const [min,max] = base[param] || [0,50];
+  return Array.from({length:pointsPerTrace}, ()=> +(Math.random()*(max-min)+min).toFixed(2));
+}
+
+/* ====== Build traces ====== */
+let data3D = [];
+floors.forEach((floor)=>{
+  Object.keys(parameters).forEach(system=>{
+    parameters[system].forEach((param,i)=>{
+      const color = neonPalette[i % neonPalette.length]; 
+      data3D.push({
+        x: xAxisValues,
+        y: Array(pointsPerTrace).fill(floor), // ใช้ชื่อ floor เป็นหมวดหมู่ (categorical)
+        z: generateData(param),
+        mode: 'lines',
+        type: 'scatter3d',
+        name: `${floor} - ${param} - ${system}`,
+        line: { width: 4, color },
+        visible: true
+      });
+    });
+  });
+});
+
+/* ====== Legend toggle ====== */
+let legendVisible = false;
+document.getElementById('legendToggle').addEventListener('click', ()=>{
+  legendVisible = !legendVisible;
+  document.getElementById('legendToggle').innerText = legendVisible ? 'Hide Legend' : 'Show Legend';
+  Plotly.relayout('dashboard3D', {showlegend:legendVisible});
+});
+
+/* ====== System → Param dynamic ====== */
+const systemSelect = document.getElementById('systemSelect');
+const paramSelect  = document.getElementById('paramSelect');
+
+systemSelect.addEventListener('change', ()=>{
+  const sys = systemSelect.value;
+  paramSelect.innerHTML = '<option value="ALL">All Parameters</option>';
+  if (parameters[sys]) parameters[sys].forEach(p=> paramSelect.innerHTML += `<option value="${p}">${p}</option>`);
+  updateVisibility();
+});
+paramSelect.addEventListener('change', updateVisibility);
+
+/* ====== Floor checkboxes logic ====== */
+const floorAll = document.getElementById('floor_all');
+const floorItems = Array.from(document.querySelectorAll('.floor-item'));
+
+// master toggle
+floorAll.addEventListener('change', ()=>{
+  const checked = floorAll.checked;
+  floorItems.forEach(cb => cb.checked = checked);
+  updateVisibility();
+});
+
+// individual items
+floorItems.forEach(cb=>{
+  cb.addEventListener('change', ()=>{
+    // ถ้ามีอันไหนไม่ถูกเลือก ให้ปิด All, ถ้าทุกอันถูกเลือก ให้เปิด All
+    const allChecked = floorItems.every(x => x.checked);
+    floorAll.checked = allChecked;
+    updateVisibility();
+  });
+});
+
+function getSelectedFloors(){
+  // ถ้า All ถูกเลือก หรือทุกอันถูกติ๊ก → ถือว่าเลือกทุกชั้น
+  if (floorAll.checked || floorItems.every(x=>x.checked)) return new Set(floors);
+  return new Set(floorItems.filter(x=>x.checked).map(x=>x.value));
+}
+
+/* ====== Visibility filter ====== */
+function updateVisibility(){
+  const selectedFloors = getSelectedFloors();
+  const selSys   = systemSelect.value;
+  const selParam = paramSelect.value;
+
+  data3D.forEach(trace=>{
+    const [floor,param,system] = trace.name.split(' - ');
+    trace.visible =
+      selectedFloors.has(floor) &&
+      (selSys==='ALL'   || system===selSys) &&
+      (selParam==='ALL' || param===selParam);
+  });
+
+  Plotly.react('dashboard3D', data3D, layout3D, {responsive:true, displayModeBar:true});
+}
+
+/* ====== Layout 3D (โปร่งใส/Neon) ====== */
+const layout3D = {
+  paper_bgcolor:'rgba(0,0,0,0)',
+  plot_bgcolor:'rgba(0,0,0,0)',
+  showlegend: legendVisible,
+  scene:{
+    xaxis:{title:'Hour', color:'#0ff', gridcolor:'rgba(0,255,255,0.2)', backgroundcolor:'rgba(0,0,0,0)', range:[0, pointsPerTrace-1]},
+    // ใช้ y เป็น category โดยตรง จึงไม่ต้องกำหนด tickvals/ticktext
+    yaxis:{title:'Floor', color:'#0ff', gridcolor:'rgba(0,255,255,0.2)', backgroundcolor:'rgba(0,0,0,0)'},
+    zaxis:{title:'Value', color:'#0ff', gridcolor:'rgba(0,255,255,0.2)', backgroundcolor:'rgba(0,0,0,0)'},
+    camera:{eye:{x:2.4, y:2.9, z:2.0}}
+  },
+  margin:{l:0,r:0,b:0,t:0},
+  legend:{orientation:'h', x:0.5, xanchor:'center', y:-0.2, font:{color:'#0ff'}, bgcolor:'rgba(0,0,0,0)'}
+};
+
+/* ====== Initial render ====== */
+Plotly.newPlot('dashboard3D', data3D, layout3D, {responsive:true, displayModeBar:true});
+</script>
+
+</body>
+</html>

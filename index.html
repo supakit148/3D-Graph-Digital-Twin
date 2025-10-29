@@ -1,21 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
 <meta charset="UTF-8">
-<title>Digital Twin 3D Neon Dashboard – Multi-Floor + Fullscreen</title>
+<title>Digital Twin 3D Neon Dashboard – Fullscreen Stretch Max</title>
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <style>
   html, body {
     height: 100%;
     margin: 0;
-    overflow: hidden; /* ✅ ไม่มี scroll bar */
+    overflow: hidden;
     background: #000;
     font-family: 'Orbitron', sans-serif;
     color: #0ff;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
   }
 
   .controls {
@@ -24,10 +22,10 @@
     padding: 12px;
     flex-wrap: wrap;
     background: #111a;
-    border-radius: 10px;
+    border-radius: 0 0 12px 12px;
     align-items: center;
-    width: min(95vw, 1600px);
-    box-shadow: 0 0 20px rgba(0,255,255,.25);
+    width: 100vw;
+    box-shadow: 0 0 25px rgba(0,255,255,.3);
     z-index: 10;
   }
 
@@ -41,20 +39,15 @@
     font-weight: 700;
   }
 
-  select option { background: #000; color: #0ff; }
-
   #dashboard3D {
-    width: min(95vw, 1600px);
-    height: min(85vh, 900px); /* ✅ Block สมส่วน */
-    border-radius: 12px;
+    flex: 1;
+    width: 100vw;
+    border-top: 1px solid rgba(0,255,255,0.2);
+    border-bottom: 1px solid rgba(0,255,255,0.2);
+    box-shadow: 0 0 40px rgba(0,255,255,0.15) inset;
     background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-    border: 1px solid rgba(0,255,255,.25);
-    box-shadow: 0 0 40px rgba(0,255,255,.15);
   }
 
-  #legendToggle, #fullscreenBtn { margin-left: auto; }
-
-  /* Neon Checkbox */
   .floor-group {
     display: flex;
     gap: 10px;
@@ -83,26 +76,16 @@
     cursor: pointer;
   }
 
-  .label-title { font-weight: 700; margin-right: 6px; opacity: .9; }
+  #legendToggle, #fullscreenBtn { margin-left: auto; }
 
-  /* Responsive */
   @media (max-width: 768px) {
-    #dashboard3D {
-      width: 100vw;
-      height: 80vh;
-      border-radius: 0;
-    }
-    .controls {
-      flex-direction: column;
-      width: 100vw;
-      border-radius: 0;
-    }
+    .controls { border-radius: 0; }
   }
 </style>
 </head>
 <body>
 
-<div class="controls">
+<div class="controls" id="controlsBar">
   <div class="floor-group" id="floorChecks">
     <span class="label-title">Floors:</span>
     <label class="floor-chip"><input type="checkbox" id="floor_all" checked> All Floors</label>
@@ -142,10 +125,10 @@ const parameters = {
 };
 const floors = ["1st_Floor","M_Floor","2nd_Floor","3rd_Floor","4th_Floor","5th_Floor"];
 const neonPalette = ["#00FFFF","#7DF9FF","#8A2BE2","#FF00FF","#00FF7F","#FF1493","#1E90FF","#00CED1"];
-const pointsPerTrace = 24*3;
+const pointsPerTrace = 24 * 3;
 const xAxisValues = [...Array(pointsPerTrace).keys()];
 
-/* ====== Data generator ====== */
+/* ====== Random data generator ====== */
 function generateData(param){
   const base={
     "Offline":[0,5],"Online":[5,20],"Intruder":[0,2],"Total":[5,20],
@@ -158,7 +141,7 @@ function generateData(param){
   return Array.from({length:pointsPerTrace},()=>+(Math.random()*(max-min)+min).toFixed(2));
 }
 
-/* ====== Build traces ====== */
+/* ====== Traces ====== */
 let data3D=[];
 floors.forEach(floor=>{
   Object.keys(parameters).forEach(system=>{
@@ -178,52 +161,59 @@ floors.forEach(floor=>{
   });
 });
 
-/* ====== Legend toggle ====== */
-let legendVisible=true;
-const legendBtn=document.getElementById('legendToggle');
-legendBtn.addEventListener('click',()=>{
-  legendVisible=!legendVisible;
-  legendBtn.innerText=legendVisible?'Hide Legend':'Show Legend';
-  Plotly.relayout('dashboard3D',{showlegend:legendVisible});
-});
+/* ====== Layout ====== */
+let layout3D = {
+  paper_bgcolor:'rgba(0,0,0,0)',
+  plot_bgcolor:'rgba(0,0,0,0)',
+  showlegend:true,
+  scene:{
+    xaxis:{title:'Hour',color:'#0ff',gridcolor:'rgba(0,255,255,0.2)',range:[0,pointsPerTrace-1]},
+    yaxis:{title:'Floor',color:'#0ff',gridcolor:'rgba(0,255,255,0.2)'},
+    zaxis:{title:'Value',color:'#0ff',gridcolor:'rgba(0,255,255,0.2)'},
+    aspectmode:'manual',
+    aspectratio:{x:3.8,y:1,z:1}, // เริ่มต้นยืดมาก
+    camera:{eye:{x:4.5,y:3,z:1.8}}
+  },
+  margin:{l:0,r:0,b:0,t:0},
+  legend:{
+    orientation:'h',
+    x:0.5,xanchor:'center',y:-0.05,
+    font:{color:'#0ff'},
+    bgcolor:'rgba(0,0,0,0)'
+  }
+};
 
-/* ====== System → Param dynamic ====== */
-const systemSelect=document.getElementById('systemSelect');
-const paramSelect=document.getElementById('paramSelect');
-systemSelect.addEventListener('change',()=>{
-  const sys=systemSelect.value;
-  paramSelect.innerHTML='<option value="ALL">All Parameters</option>';
-  if(parameters[sys]) parameters[sys].forEach(p=>paramSelect.innerHTML+=`<option value="${p}">${p}</option>`);
-  updateVisibility();
-});
-paramSelect.addEventListener('change',updateVisibility);
+/* ====== Initial Render ====== */
+Plotly.newPlot('dashboard3D',data3D,layout3D,{responsive:true,displayModeBar:true});
 
-/* ====== Floor Checkboxes ====== */
-const floorAll=document.getElementById('floor_all');
-const floorItems=Array.from(document.querySelectorAll('.floor-item'));
-floorAll.addEventListener('change',()=>{
-  const checked=floorAll.checked;
-  floorItems.forEach(cb=>cb.checked=checked);
-  updateVisibility();
-});
-floorItems.forEach(cb=>{
-  cb.addEventListener('change',()=>{
-    const allChecked=floorItems.every(x=>x.checked);
-    floorAll.checked=allChecked;
-    updateVisibility();
+/* ====== Resize dynamically ====== */
+function adjustSize(){
+  const chart = document.getElementById('dashboard3D');
+  const controls = document.getElementById('controlsBar');
+  const vH = window.innerHeight - controls.getBoundingClientRect().height;
+  chart.style.height = `${vH}px`;
+  chart.style.width = '100vw';
+
+  const ratio = window.innerWidth / vH;
+  const xStretch = Math.min(6.5, Math.max(3.5, ratio * 1.8)); // ยืดสุดแต่ไม่บิด
+  Plotly.relayout(chart, {
+    'scene.aspectratio': {x:xStretch, y:1, z:1},
+    'scene.camera.eye': {x:xStretch * 1.2, y:2.6, z:1.6}
   });
-});
-
-function getSelectedFloors(){
-  if(floorAll.checked||floorItems.every(x=>x.checked)) return new Set(floors);
-  return new Set(floorItems.filter(x=>x.checked).map(x=>x.value));
+  Plotly.Plots.resize(chart);
 }
+window.addEventListener('load', adjustSize);
+window.addEventListener('resize', adjustSize);
 
-/* ====== Update Visibility ====== */
+/* ====== Filter Controls ====== */
 function updateVisibility(){
-  const selectedFloors=getSelectedFloors();
   const selSys=systemSelect.value;
   const selParam=paramSelect.value;
+  const selectedFloors=new Set(
+    Array.from(document.querySelectorAll('.floor-item'))
+      .filter(cb=>cb.checked)
+      .map(cb=>cb.value)
+  );
   data3D.forEach(trace=>{
     const [floor,param,system]=trace.name.split(' - ');
     trace.visible=
@@ -232,39 +222,34 @@ function updateVisibility(){
       (selParam==='ALL'||param===selParam);
   });
   Plotly.react('dashboard3D',data3D,layout3D,{responsive:true,displayModeBar:true});
+  adjustSize();
 }
+systemSelect.addEventListener('change',updateVisibility);
+paramSelect.addEventListener('change',updateVisibility);
+document.querySelectorAll('.floor-item, #floor_all').forEach(cb=>{
+  cb.addEventListener('change',updateVisibility);
+});
 
-/* ====== Layout ====== */
-const layout3D={
-  paper_bgcolor:'rgba(0,0,0,0)',
-  plot_bgcolor:'rgba(0,0,0,0)',
-  showlegend:true,
-  scene:{
-    xaxis:{title:'Hour',color:'#0ff',gridcolor:'rgba(0,255,255,0.2)',backgroundcolor:'rgba(0,0,0,0)',range:[0,pointsPerTrace-1]},
-    yaxis:{title:'Floor',color:'#0ff',gridcolor:'rgba(0,255,255,0.2)',backgroundcolor:'rgba(0,0,0,0)'},
-    zaxis:{title:'Value',color:'#0ff',gridcolor:'rgba(0,255,255,0.2)',backgroundcolor:'rgba(0,0,0,0)'},
-    camera:{eye:{x:2.2,y:2.8,z:2.0}}
-  },
-  margin:{l:0,r:0,b:0,t:0},
-  legend:{orientation:'h',x:0.5,xanchor:'center',y:-0.15,font:{color:'#0ff'},bgcolor:'rgba(0,0,0,0)'}
-};
+/* ====== Legend Toggle ====== */
+document.getElementById('legendToggle').addEventListener('click',()=>{
+  layout3D.showlegend=!layout3D.showlegend;
+  document.getElementById('legendToggle').textContent=layout3D.showlegend?'Hide Legend':'Show Legend';
+  Plotly.relayout('dashboard3D',{showlegend:layout3D.showlegend});
+});
 
-/* ====== Render ====== */
-Plotly.newPlot('dashboard3D',data3D,layout3D,{responsive:true,displayModeBar:true});
-
-/* ====== Fullscreen ====== */
+/* ====== Fullscreen Toggle ====== */
 const fsBtn=document.getElementById('fullscreenBtn');
 fsBtn.addEventListener('click',()=>{
   const elem=document.documentElement;
   if(!document.fullscreenElement){
-    elem.requestFullscreen().catch(err=>console.error(err));
+    elem.requestFullscreen();
     fsBtn.textContent='✕ Exit Fullscreen';
   }else{
     document.exitFullscreen();
     fsBtn.textContent='⛶ Fullscreen';
   }
+  setTimeout(adjustSize,100);
 });
 </script>
-
 </body>
 </html>
